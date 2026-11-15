@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Panel de administrador - Telegraph Plus</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Barra Superior -->
+    <header class="navbar">
+        <div class="brand-title">Panel de administrador</div>
+        <button id="themeToggleBtn" class="theme-toggle">🌙 Modo Oscuro</button>
+    </header>
+
+    <main class="container">
+        <!-- Bienvenida Personalizada -->
+        <p id="dashWelcome" class="dash-welcome"></p>
+
+        <!-- SECCIÓN: MIS CUENTAS (Tope de 5) -->
+        <section>
+            <div class="section-header">
+                <h2 style="font-size: 1.25rem;">Mis cuentas (<span id="accountCount">0</span>/5)</h2>
+                <button id="btnOpenAddAccount" class="btn btn-secondary btn-sm">+ Añadir / Importar cuenta</button>
+            </div>
+
+            <div id="accountsList"></div>
+        </section>
+
+        <!-- SUBPANEL DE ADMINISTRACIÓN DE CUENTA SELECCIONADA -->
+        <section id="workspacePanel" class="workspace-panel" style="display: none;">
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="tabAccount">1. Administrar mi cuenta</button>
+                <button class="tab-btn" data-tab="tabBlogs">2. Ver y administrar mis blogs</button>
+            </div>
+
+            <!-- PESTAÑA 1: ADMINISTRAR MI CUENTA -->
+            <div id="tabAccount" class="tab-content">
+                <div class="option-box">
+                    <label>Token de acceso (access_token)</label>
+                    <div id="displayToken" class="token-box">••••••••••••••••</div>
+                    <div class="btn-row">
+                        <button id="btnToggleToken" class="btn btn-secondary btn-sm">👁️ Mostrar / Ocultar</button>
+                        <button id="btnCopyToken" class="btn btn-secondary btn-sm">📋 Copiar</button>
+                        <button id="btnDownloadToken" class="btn btn-secondary btn-sm">⬇️ Descargar .txt</button>
+                        <button id="btnRevokeToken" class="btn btn-danger btn-sm">🔄 Revocar Token</button>
+                    </div>
+                    <small style="color: var(--text-secondary); display: block;">
+                        * Revocar genera un nuevo access_token oficial en Telegraph e invalida el anterior.
+                    </small>
+                </div>
+
+                <div class="option-box">
+                    <h3 style="font-size: 1.05rem; margin-bottom: 0.75rem;">Editar detalles de la cuenta</h3>
+                    <form id="editAccountForm">
+                        <label for="editShortName">Nombre interno (short_name) *</label>
+                        <input type="text" id="editShortName" maxlength="32" required>
+
+                        <label for="editAuthorName">Nombre del autor (author_name - opcional)</label>
+                        <input type="text" id="editAuthorName" maxlength="128" placeholder="Ej. Gabriel García">
+
+                        <label for="editAuthorUrl">Enlace del autor (author_url - opcional)</label>
+                        <input type="url" id="editAuthorUrl" placeholder="https://t.me/tu_usuario">
+
+                        <div class="btn-row" style="margin-top: 0.5rem; margin-bottom: 0;">
+                            <button type="submit" class="btn btn-primary btn-sm">Guardar cambios</button>
+                            <button type="button" id="btnOpenBrowserAuth" class="btn btn-secondary btn-sm">
+                                🌐 Abrir sesión en navegador (Telegra.ph)
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- PESTAÑA 2: VER Y ADMINISTRAR MIS BLOGS -->
+            <div id="tabBlogs" class="tab-content" style="display: none;">
+                <div class="section-header">
+                    <span style="font-weight: 600;">Artículos publicados (<span id="blogCount">0</span>/10)</span>
+                    <div class="btn-row" style="margin-bottom: 0;">
+                        <button id="btnRefreshBlogs" class="btn btn-secondary btn-sm">🔄 Refrescar</button>
+                        <button id="btnNewArticle" class="btn btn-primary btn-sm">✍️ Nuevo artículo</button>
+                    </div>
+                </div>
+
+                <div id="blogsList"></div>
+            </div>
+        </section>
+    </main>
+
+    <!-- PIE DE PÁGINA: CERRAR SESIÓN -->
+    <footer class="dash-footer">
+        <button id="btnLogout" class="btn btn-danger btn-sm">Cerrar sesión</button>
+    </footer>
+
+    <!-- MODAL: AÑADIR / IMPORTAR OTRA CUENTA (Hasta 5) -->
+    <div id="addAccountModal" class="modal-backdrop">
+        <div class="modal-card">
+            <button class="modal-close" onclick="closeModal('addAccountModal')">&times;</button>
+            <h2 class="modal-title">Añadir cuenta (Máx. 5)</h2>
+
+            <div class="option-box">
+                <label>Crear nueva cuenta en Telegraph</label>
+                <input type="text" id="newDashShortName" placeholder="Nombre de la cuenta (short_name)">
+                <button id="btnDashCreateAcc" class="btn btn-primary btn-sm" style="width: 100%;">Crear y vincular</button>
+            </div>
+
+            <div class="option-box">
+                <label>Pegar token existente</label>
+                <input type="text" id="newDashToken" placeholder="Pega tu access_token aquí...">
+                <button id="btnDashPasteToken" class="btn btn-secondary btn-sm" style="width: 100%;">Vincular token</button>
+            </div>
+
+            <div class="option-box" style="margin-bottom: 0;">
+                <label>Importar desde archivo .txt</label>
+                <input type="file" id="dashTxtImport" accept=".txt" style="font-size: 0.9rem;">
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: EDITOR DE ARTÍCULOS (CREAR / EDITAR) -->
+    <div id="editorModal" class="modal-backdrop">
+        <div class="modal-card" style="max-width: 560px;">
+            <button class="modal-close" onclick="closeModal('editorModal')">&times;</button>
+            <h2 id="editorModalTitle" class="modal-title">Nuevo artículo</h2>
+            <form id="articleEditorForm">
+                <input type="hidden" id="editArticlePath">
+                <label for="articleTitle">Título del artículo *</label>
+                <input type="text" id="articleTitle" placeholder="Título llamativo..." required>
+
+                <label for="articleContent">Contenido *</label>
+                <textarea id="articleContent" rows="8" placeholder="Escribe tu historia aquí..." required></textarea>
+
+                <button type="submit" id="btnPublishArticle" class="btn btn-primary" style="width: 100%;">
+                    Publicar en Telegraph
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        const currentUser = TelegramIdentity.getUser();
+        let userAccounts = [];
+        let selectedAccount = null;
+        let tokenVisible = false;
+
+        document.getElementById('dashWelcome').textContent = 
+            `Este es tu panel de administrador, ${currentUser.first_name}, donde podrás administrar todas tus cuentas de Telegraph Plus creadas.`;
+
+        function openModal(id) { document.getElementById(id).classList.add('active'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+        // Inicialización del Dashboard
+        async function initDashboard() {
+            userAccounts = await StorageService.getAccounts(currentUser.id);
+            
+            if (userAccounts.length === 0) {
+                window.location.href = 'index.html';
+                return;
+            }
+
+            const activeToken = StorageService.getActiveSession();
+            selectedAccount = userAccounts.find(a => a.access_token === activeToken) || userAccounts[0];
+            StorageService.setActiveSession(selectedAccount.access_token);
+
+            renderAccountsList();
+            loadAccountWorkspace(selectedAccount);
+        }
+
+        // Renderizar lista de cuentas (Cuenta #1, Cuenta #2...)
+        function renderAccountsList() {
+            const listEl = document.getElementById('accountsList');
+            document.getElementById('accountCount').textContent = userAccounts.length;
+            document.getElementById('btnOpenAddAccount').disabled = userAccounts.length >= CONFIG.MAX_ACCOUNTS;
+
+            listEl.innerHTML = userAccounts.map((acc, index) => {
+                const isSelected = selectedAccount && acc.access_token === selectedAccount.access_token;
+                return `
+                    <div class="account-card ${isSelected ? 'selected' : ''}" onclick="selectAccount('${acc.access_token}')">
+                        <div>
+                            <strong>Cuenta #${index + 1}: ${acc.short_name}</strong>
+                            <div style="font-size: 0.85rem; color: var(--text-secondary);">
+                                Autor: ${acc.author_name || 'Sin definir'}
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 0.4rem; align-items: center;">
+                            ${acc.is_master ? '<span class="badge">Maestra</span>' : ''}
+                            <span>${isSelected ? '▼' : '▶'}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function selectAccount(token) {
+            selectedAccount = userAccounts.find(a => a.access_token === token);
+            StorageService.setActiveSession(token);
+            tokenVisible = false;
+            renderAccountsList();
+            loadAccountWorkspace(selectedAccount);
+        }
+
+        async function loadAccountWorkspace(account) {
+            if (!account) return;
+            document.getElementById('workspacePanel').style.display = 'block';
+
+            // Actualizar vista de token
+            document.getElementById('displayToken').textContent = '••••••••••••••••••••••••••••••••••••••••';
+            document.getElementById('editShortName').value = account.short_name || '';
+            document.getElementById('editAuthorName').value = account.author_name || '';
+            document.getElementById('editAuthorUrl').value = account.author_url || '';
+
+            // Sincronizar datos reales desde Telegraph API
+            try {
+                const freshInfo = await TelegraphAPI.getAccountInfo(account.access_token);
+                document.getElementById('editShortName').value = freshInfo.short_name;
+                document.getElementById('editAuthorName').value = freshInfo.author_name || '';
+                document.getElementById('editAuthorUrl').value = freshInfo.author_url || '';
+            } catch (e) {
+                console.warn('No se pudo refrescar info remota:', e);
+            }
+
+            loadBlogsList();
+        }
+
+        // Navegación por pestañas
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+                btn.classList.add('active');
+                document.getElementById(btn.dataset.tab).style.display = 'block';
+            });
+        });
+
+        // ACCIONES DE TOKEN
+        document.getElementById('btnToggleToken').addEventListener('click', () => {
+            tokenVisible = !tokenVisible;
+            document.getElementById('displayToken').textContent = tokenVisible 
+                ? selectedAccount.access_token 
+                : '••••••••••••••••••••••••••••••••••••••••';
+        });
+
+        document.getElementById('btnCopyToken').addEventListener('click', () => {
+            navigator.clipboard.writeText(selectedAccount.access_token);
+            UI.toast('Token copiado al portapapeles');
+        });
+
+        document.getElementById('btnDownloadToken').addEventListener('click', () => {
+            const content = `Telegraph Plus - Respaldo de Cuenta\nNombre: ${selectedAccount.short_name}\nAccess Token: ${selectedAccount.access_token}`;
+            UI.downloadTxt(`telegraph_${selectedAccount.short_name.replace(/\s+/g, '_')}.txt`, content);
+        });
+
+        document.getElementById('btnRevokeToken').addEventListener('click', async () => {
+            if (!confirm('¿Seguro que deseas revocar el token actual? Se generará uno nuevo y el anterior dejará de funcionar.')) return;
+            try {
+                UI.toast('Revocando token en Telegraph...', 0);
+                const result = await TelegraphAPI.revokeAccessToken(selectedAccount.access_token);
+                userAccounts = await StorageService.updateAccountTokenOrMeta(
+                    currentUser.id, 
+                    selectedAccount.access_token, 
+                    { access_token: result.access_token }
+                );
+                selectedAccount.access_token = result.access_token;
+                StorageService.setActiveSession(result.access_token);
+                renderAccountsList();
+                loadAccountWorkspace(selectedAccount);
+                UI.toast('Token revocado y actualizado con éxito');
+            } catch (err) {
+                UI.toast(`Error: ${err.message}`);
+            }
+        });
+
+        // Iniciar sesión directamente en el navegador oficial telegra.ph usando auth_url
+        document.getElementById('btnOpenBrowserAuth').addEventListener('click', async () => {
+            try {
+                UI.toast('Generando enlace de sesión en navegador...', 0);
+                const info = await TelegraphAPI.getAccountInfo(selectedAccount.access_token);
+                if (info.auth_url) {
+                    UI.toast('Abriendo Telegra.ph...', 1500);
+                    window.open(info.auth_url, '_blank');
+                }
+            } catch (err) {
+                UI.toast(`Error: ${err.message}`);
+            }
+        });
+
+        // Editar metadatos de la cuenta
+        document.getElementById('editAccountForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const short_name = document.getElementById('editShortName').value.trim();
+            const author_name = document.getElementById('editAuthorName').value.trim();
+            const author_url = document.getElementById('editAuthorUrl').value.trim();
+
+            try {
+                await TelegraphAPI.editAccountInfo(selectedAccount.access_token, short_name, author_name, author_url);
+                userAccounts = await StorageService.updateAccountTokenOrMeta(
+                    currentUser.id,
+                    selectedAccount.access_token,
+                    { short_name, author_name, author_url }
+                );
+                selectedAccount = userAccounts.find(a => a.access_token === selectedAccount.access_token);
+                renderAccountsList();
+                UI.toast('Datos de la cuenta actualizados');
+            } catch (err) {
+                UI.toast(`Error: ${err.message}`);
+            }
+        });
+
+        // GESTIÓN DE BLOGS / ARTÍCULOS (Límite 10)
+        async function loadBlogsList() {
+            const container = document.getElementById('blogsList');
+            container.innerHTML = '<p style="color: var(--text-secondary);">Cargando artículos...</p>';
+
+            try {
+                const res = await TelegraphAPI.getPageList(selectedAccount.access_token, CONFIG.MAX_PAGES);
+                const pages = res.pages || [];
+                document.getElementById('blogCount').textContent = pages.length;
+                document.getElementById('btnNewArticle').disabled = pages.length >= CONFIG.MAX_PAGES;
+
+                if (pages.length === 0) {
+                    container.innerHTML = '<p style="color: var(--text-secondary);">No hay artículos publicados en esta cuenta.</p>';
+                    return;
+                }
+
+                container.innerHTML = pages.map(page => `
+                    <div class="blog-item">
+                        <div class="blog-title">${page.title}</div>
+                        <div class="blog-meta">Vistas: ${page.views} • ${page.url}</div>
+                        <div class="btn-row" style="margin-bottom: 0;">
+                            <a href="${page.url}" target="_blank" class="btn btn-secondary btn-sm" style="text-decoration:none;">Ver</a>
+                            <button onclick="openEditArticle('${page.path}')" class="btn btn-secondary btn-sm">Editar</button>
+                            <button onclick="shareArticle('${page.url}', '${page.title.replace(/'/g, "\\'")}')" class="btn btn-secondary btn-sm">Compartir</button>
+                            <button onclick="deleteArticle('${page.path}')" class="btn btn-danger btn-sm">Eliminar</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                container.innerHTML = `<p style="color: var(--danger);">Error al cargar blogs: ${err.message}</p>`;
+            }
+        }
+
+        document.getElementById('btnRefreshBlogs').addEventListener('click', loadBlogsList);
+
+        // Crear o Editar Artículo
+        document.getElementById('btnNewArticle').addEventListener('click', () => {
+            document.getElementById('editorModalTitle').textContent = 'Nuevo artículo';
+            document.getElementById('editArticlePath').value = '';
+            document.getElementById('articleTitle').value = '';
+            document.getElementById('articleContent').value = '';
+            openModal('editorModal');
+        });
+
+        async function openEditArticle(path) {
+            try {
+                UI.toast('Cargando contenido en el editor...', 0);
+                const page = await TelegraphAPI.getPage(path);
+                document.getElementById('editorModalTitle').textContent = 'Editar artículo';
+                document.getElementById('editArticlePath').value = path;
+                document.getElementById('articleTitle').value = page.title;
+                document.getElementById('articleContent').value = UI.nodesToText(page.content);
+                UI.toast('Contenido cargado', 1000);
+                openModal('editorModal');
+            } catch (err) {
+                UI.toast(`Error al cargar artículo: ${err.message}`);
+            }
+        }
+
+        document.getElementById('articleEditorForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const path = document.getElementById('editArticlePath').value;
+            const title = document.getElementById('articleTitle').value.trim();
+            const rawText = document.getElementById('articleContent').value;
+            const nodes = UI.textToNodes(rawText);
+
+            try {
+                UI.toast('Publicando en Telegraph...', 0);
+                if (path) {
+                    await TelegraphAPI.editPage(selectedAccount.access_token, path, title, selectedAccount.author_name, nodes);
+                    UI.toast('Artículo actualizado con éxito');
+                } else {
+                    await TelegraphAPI.createPage(selectedAccount.access_token, title, selectedAccount.author_name, nodes);
+                    UI.toast('Artículo publicado con éxito');
+                }
+                closeModal('editorModal');
+                loadBlogsList();
+            } catch (err) {
+                UI.toast(`Error al guardar: ${err.message}`);
+            }
+        });
+
+        // Compartir nativo de Telegram
+        function shareArticle(url, title) {
+            const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(title)}`;
+            if (window.Telegram?.WebApp?.openTelegramLink) {
+                window.Telegram.WebApp.openTelegramLink(shareUrl);
+            } else {
+                window.open(shareUrl, '_blank');
+            }
+        }
+
+        // Eliminar (Limpia el contenido de la página en la API para simular borrado)
+        async function deleteArticle(path) {
+            if (!confirm('¿Eliminar este artículo? La API de Telegraph limpiará su título y contenido.')) return;
+            try {
+                await TelegraphAPI.editPage(
+                    selectedAccount.access_token,
+                    path,
+                    '[Artículo eliminado]',
+                    '',
+                    [{ tag: 'p', children: ['Este contenido ha sido eliminado por el autor.'] }]
+                );
+                UI.toast('Artículo eliminado');
+                loadBlogsList();
+            } catch (err) {
+                UI.toast(`Error al eliminar: ${err.message}`);
+            }
+        }
+
+        // AÑADIR / IMPORTAR MÁS CUENTAS EN EL DASHBOARD
+        document.getElementById('btnOpenAddAccount').addEventListener('click', () => openModal('addAccountModal'));
+
+        async function linkExternalToken(token) {
+            const cleanToken = token.trim();
+            if (!cleanToken) return;
+            try {
+                const info = await TelegraphAPI.getAccountInfo(cleanToken);
+                userAccounts = await StorageService.saveAccount(currentUser, {
+                    access_token: cleanToken,
+                    short_name: info.short_name,
+                    author_name: info.author_name,
+                    author_url: info.author_url
+                });
+                closeModal('addAccountModal');
+                selectAccount(cleanToken);
+                UI.toast('Cuenta vinculada correctamente');
+            } catch (err) {
+                UI.toast(`Error: ${err.message}`);
+            }
+        }
+
+        document.getElementById('btnDashCreateAcc').addEventListener('click', async () => {
+            const name = document.getElementById('newDashShortName').value.trim();
+            if (!name) return;
+            try {
+                const created = await TelegraphAPI.createAccount(name, currentUser.first_name);
+                userAccounts = await StorageService.saveAccount(currentUser, {
+                    access_token: created.access_token,
+                    short_name: created.short_name,
+                    author_name: created.author_name,
+                    author_url: created.author_url
+                });
+                closeModal('addAccountModal');
+                selectAccount(created.access_token);
+                UI.toast('Nueva cuenta creada y vinculada');
+            } catch (err) {
+                UI.toast(`Error: ${err.message}`);
+            }
+        });
+
+        document.getElementById('btnDashPasteToken').addEventListener('click', () => {
+            linkExternalToken(document.getElementById('newDashToken').value);
+        });
+
+        document.getElementById('dashTxtImport').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const match = ev.target.result.match(/[a-f0-9]{60}/i);
+                linkExternalToken(match ? match[0] : ev.target.result);
+            };
+            reader.readAsText(file);
+        });
+
+        // CERRAR SESIÓN (Pie de página)
+        document.getElementById('btnLogout').addEventListener('click', () => {
+            StorageService.clearSession();
+            UI.toast('Sesión cerrada', 1200);
+            setTimeout(() => {
+                window.location.href = 'index.html';
+            }, 600);
+        });
+
+        initDashboard();
+    </script>
+</body>
+</html>
