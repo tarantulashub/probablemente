@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Telegraph Plus</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Barra Superior -->
+    <header class="navbar">
+        <div class="brand-title">Telegraph Plus</div>
+        <button id="themeToggleBtn" class="theme-toggle">🌙 Modo Oscuro</button>
+    </header>
+
+    <!-- Cuerpo Principal -->
+    <main class="container">
+        <div id="userGreeting" class="greeting-corner">¡Hola!</div>
+
+        <section class="hero-center">
+            <h1 class="hero-subtitle">¿Qué vas a hacer hoy?</h1>
+            <div class="action-group">
+                <button id="openLoginModalBtn" class="btn btn-primary">Entrar</button>
+                <button id="openCreateModalBtn" class="btn btn-secondary">Crear cuenta</button>
+            </div>
+        </section>
+    </main>
+
+    <!-- MODAL: ENTRAR -->
+    <div id="loginModal" class="modal-backdrop">
+        <div class="modal-card">
+            <button class="modal-close" onclick="closeModal('loginModal')">&times;</button>
+            <h2 id="loginModalTitle" class="modal-title">¿Cómo quieres entrar en tu cuenta de Telegraph plus?</h2>
+
+            <!-- Opción 1: Pegar Token -->
+            <div class="option-box">
+                <label for="pasteTokenInput">1. Pegar token de acceso</label>
+                <input type="text" id="pasteTokenInput" placeholder="Pega tu access_token aquí...">
+                <button id="btnLoginToken" class="btn btn-primary btn-sm" style="width: 100%;">Entrar con token</button>
+            </div>
+
+            <!-- Opción 2: Importar .txt -->
+            <div class="option-box">
+                <label for="txtFileInput">2. Importar archivo .txt</label>
+                <input type="file" id="txtFileInput" accept=".txt" style="font-size: 0.9rem;">
+            </div>
+
+            <!-- Opción 3: Auto-login con ID de Telegram -->
+            <div class="option-box" style="margin-bottom: 0;">
+                <label>3. Acceso rápido vinculado</label>
+                <button id="btnAutoLogin" class="btn btn-secondary btn-sm" style="width: 100%;">
+                    Loguearse automáticamente
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: CREAR CUENTA -->
+    <div id="createModal" class="modal-backdrop">
+        <div class="modal-card">
+            <button class="modal-close" onclick="closeModal('createModal')">&times;</button>
+            <h2 class="modal-title">Crear nueva cuenta</h2>
+            <p style="color: var(--text-secondary); font-size: 0.95rem; margin-bottom: 1rem;">
+                Asigna un nombre interno para identificar tu cuenta (máximo 5 cuentas por usuario).
+            </p>
+            <form id="createAccountForm">
+                <label for="shortNameInput" style="font-weight: 600; display: block; margin-bottom: 0.4rem;">
+                    Nombre de la cuenta (short_name) *
+                </label>
+                <input type="text" id="shortNameInput" placeholder="Ej. Mi Blog Personal" maxlength="32" required>
+                <button type="submit" id="btnSubmitCreate" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">
+                    Crear cuenta ahora
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        const currentUser = TelegramIdentity.getUser();
+
+        // Inicializar textos dinámicos con el nombre del usuario
+        document.getElementById('userGreeting').textContent = `¡Hola, ${currentUser.first_name}!`;
+        document.getElementById('loginModalTitle').textContent = 
+            `¿Cómo quieres entrar en tu cuenta de Telegraph plus, ${currentUser.first_name}?`;
+
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        document.getElementById('openLoginModalBtn').addEventListener('click', () => openModal('loginModal'));
+        document.getElementById('openCreateModalBtn').addEventListener('click', () => openModal('createModal'));
+
+        // Función unificada para validar token, guardarlo como cuenta maestra/activa y redirigir
+        async function authenticateAndRedirect(token) {
+            const cleanToken = token.trim();
+            if (!cleanToken) {
+                UI.toast('Por favor, ingresa un token válido.');
+                return;
+            }
+
+            try {
+                UI.toast('Verificando credenciales con Telegraph...', 0);
+                const info = await TelegraphAPI.getAccountInfo(cleanToken);
+                
+                // Guarda en la base de datos (si es la primera, se asigna automáticamente como Cuenta Maestra)
+                await StorageService.saveAccount(currentUser, {
+                    access_token: cleanToken,
+                    short_name: info.short_name,
+                    author_name: info.author_name,
+                    author_url: info.author_url
+                });
+
+                StorageService.setActiveSession(cleanToken);
+                UI.toast('Iniciado exitosamente', 2000);
+
+                setTimeout(() => {
+                    window.location.href = 'dashboard.html';
+                }, 900);
+            } catch (err) {
+                UI.toast(`Error de autenticación: ${err.message}`);
+            }
+        }
+
+        // Opción 1: Pegar token
+        document.getElementById('btnLoginToken').addEventListener('click', () => {
+            const token = document.getElementById('pasteTokenInput').value;
+            authenticateAndRedirect(token);
+        });
+
+        // Opción 2: Importar archivo .txt
+        document.getElementById('txtFileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const content = event.target.result;
+                // Extrae el token (soporta archivo con solo el token o formato "Token: xxxx")
+                const match = content.match(/[a-f0-9]{60}/i);
+                const extractedToken = match ? match[0] : content.trim();
+                authenticateAndRedirect(extractedToken);
+            };
+            reader.readAsText(file);
+        });
+
+        // Opción 3: Loguearse automáticamente
+        document.getElementById('btnAutoLogin').addEventListener('click', async () => {
+            const accounts = await StorageService.getAccounts(currentUser.id);
+            if (!accounts || accounts.length === 0) {
+                UI.toast('No tienes ninguna cuenta maestra vinculada aún. Crea una o pega tu token.');
+                return;
+            }
+            const master = accounts.find(a => a.is_master) || accounts[0];
+            authenticateAndRedirect(master.access_token);
+        });
+
+        // Flujo: Crear Cuenta + Cuenta Regresiva de 4 segundos
+        document.getElementById('createAccountForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const shortName = document.getElementById('shortNameInput').value.trim();
+            const submitBtn = document.getElementById('btnSubmitCreate');
+
+            if (!shortName) return;
+
+            try {
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Creando cuenta...';
+
+                const existing = await StorageService.getAccounts(currentUser.id);
+                if (existing.length >= CONFIG.MAX_ACCOUNTS) {
+                    throw new Error(`Ya alcanzaste el límite de ${CONFIG.MAX_ACCOUNTS} cuentas.`);
+                }
+
+                // Petición oficial createAccount a Telegraph
+                const created = await TelegraphAPI.createAccount(shortName, currentUser.first_name);
+
+                // Guardar como cuenta activa (y maestra si es la #1)
+                await StorageService.saveAccount(currentUser, {
+                    access_token: created.access_token,
+                    short_name: created.short_name,
+                    author_name: created.author_name,
+                    author_url: created.author_url
+                });
+
+                StorageService.setActiveSession(created.access_token);
+                closeModal('createModal');
+
+                // Aviso flotante con cuenta regresiva de 4 segundos
+                let seconds = 4;
+                const updateCountdown = () => {
+                    UI.toast(
+                        `Tu cuenta ha sido creada con éxito, ${currentUser.first_name}. En el panel de administrador puedes ver, copiar y descargar tu token de acceso (${seconds}s...)`,
+                        0
+                    );
+                };
+                updateCountdown();
+
+                const interval = setInterval(() => {
+                    seconds--;
+                    if (seconds > 0) {
+                        updateCountdown();
+                    } else {
+                        clearInterval(interval);
+                        window.location.href = 'dashboard.html';
+                    }
+                }, 1000);
+
+            } catch (err) {
+                UI.toast(err.message);
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Crear cuenta ahora';
+            }
+        });
+    </script>
+</body>
+</html>
